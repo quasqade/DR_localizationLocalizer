@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" build-on-make="true" name="DR_localizationLocalizer:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/DR_localizationLocalizer_jar</output-path>
+    <root id="archive" name="DR_localizationLocalizer.jar">
+      <element id="module-output" name="DR_localizationLocalizer" />
+    </root>
+  </artifact>
+</component>
