@@ -32,12 +32,55 @@ public class Main
 		try //TODO: Probably should do something about this
 		{
 
-			//Open file for reading
-			RandomAccessFile inputFile = new RandomAccessFile(path.toString(), "r"); //avoid loading everything into memory
-			long startingPosition=0; //DR1 doesn't have archives exceeding 4GB, but better be safe
+			//Open file for reading buffered
+			FileInputStream inputFileFIS = new FileInputStream(path.toFile());
+			BufferedInputStream inputFileBIS = new BufferedInputStream(inputFileFIS);
 
 			//Iterate through contents until "English" is found
+			int chunkCounter=0;
 			System.out.println("Searching for English tag (this might take a long time)...");
+
+			long totalBytes = inputFileBIS.available();
+			long fivePercentAmount = (long) (totalBytes*1.0/20);
+			int fivePercentCounter = 0;
+			long startingPosition=0; //DR1 doesn't have archives exceeding 4GB, but better be safe
+			long lastReportedPosition=totalBytes;
+			long available;
+
+			while((available = inputFileBIS.available())>0)
+			{
+				if (available<lastReportedPosition-fivePercentAmount)
+				{
+						System.out.println(fivePercentCounter++*5 + "% of file processed");
+						lastReportedPosition = available;
+				}
+				if ((char)inputFileBIS.read() == 'E') //potential tag
+				{
+					if ((char)inputFileBIS.read() == 'n')
+					{
+						if ((char)inputFileBIS.read() == 'g')
+						{
+							if ((char)inputFileBIS.read() == 'l')
+							{
+								if ((char)inputFileBIS.read() == 'i')
+								{
+									if ((char)inputFileBIS.read() == 's')
+									{
+										if ((char)inputFileBIS.read() == 'h')
+										{
+											startingPosition=totalBytes-inputFileBIS.available();
+											break;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			RandomAccessFile inputFile = new RandomAccessFile(path.toFile(), "r");
+
 			for (long i = 0; i < inputFile.length()-6; i++)
 			{
 				inputFile.seek(i);
