@@ -135,7 +135,7 @@ public class Main
 								{
 									if (inputFileMappedBuffer.get()==0)
 									{
-										System.out.println("Found sequence 2000 at " + Long.toHexString(inputFile.getFilePointer()-4).toUpperCase()+ ", terminating string search.");
+										System.out.println("Found sequence 2000 at " + Long.toHexString(inputFileMappedBuffer.position()-4).toUpperCase()+ ", terminating string search.");
 									break;
 									}
 								}
