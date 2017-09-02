@@ -17,9 +17,6 @@ import java.util.List;
 
 public class Main
 {
-	final static int BUFFER_SIZE = 1024*4; //4 kb
-	final static int AMOUNT_OF_THREADS = 4;
-
 	public static void main (String[] args)
 	{
 		Path path;
@@ -40,18 +37,18 @@ public class Main
 
 			//Iterate through contents until "English" is found
 			System.out.println("Searching for English tag (this might take a long time)...");
-			int startingPosition=0; //DR1 doesn't have archives exceeding 4GB, but better be safe
-
+			int startingPosition=0;
 
 			Instant start = Instant.now();
-
-
 			//Open file for reading memory mapped
 			RandomAccessFile inputFile = new RandomAccessFile(path.toFile(), "r");
 			FileChannel inputFileChannel = inputFile.getChannel();
 			MappedByteBuffer inputFileMappedBuffer = inputFileChannel.map(FileChannel.MapMode.READ_ONLY, 0, inputFileChannel.size());
 
 			inputFileMappedBuffer.load();
+			//TODO insert quick check for tag in unmodified dr1_data.wad or dr_localization.bin
+
+
 			for (int i = 0; i < inputFileMappedBuffer.limit(); i++)
 			{
 				if (inputFileMappedBuffer.position()!=i)
@@ -73,7 +70,7 @@ public class Main
 										if ((char)inputFileMappedBuffer.get() == 'h')
 										{
 											startingPosition = inputFileMappedBuffer.position();
-											System.out.println("Found English tag at " + Long.toHexString(startingPosition-7)+ ".");
+											System.out.println("Found English tag at " + Long.toHexString(startingPosition-7).toUpperCase()+ ".");
 											break;
 										}
 									}
@@ -88,15 +85,7 @@ public class Main
 			System.out.println("Mapped Byte Buffer took " + Duration.between(start, end));
 
 			//Read and store string offsets in a list
-			List<Integer> offsets = new ArrayList<Integer>()
-				//delete this later
-			{
-				@Override
-				protected void finalize() throws Throwable {
-					System.out.println(this+" collected");
-					super.finalize();
-				}
-			};
+			List<Integer> offsets = new ArrayList<>();
 			int counter = 0;
 			byte[] offsetBytes = new byte[4];
 			for (int i=startingPosition; i<startingPosition+640; i++) //Not sure if its possible to add variables, but if it is, this should not be constant
@@ -146,7 +135,7 @@ public class Main
 								{
 									if (inputFileMappedBuffer.get()==0)
 									{
-										System.out.println("Found sequence 2000 at " + Long.toHexString(inputFile.getFilePointer()-4)+ ", terminating string search.");
+										System.out.println("Found sequence 2000 at " + Long.toHexString(inputFile.getFilePointer()-4).toUpperCase()+ ", terminating string search.");
 									break;
 									}
 								}
