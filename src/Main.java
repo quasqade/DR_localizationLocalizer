@@ -1,9 +1,13 @@
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,6 +17,8 @@ import java.util.List;
 
 public class Main
 {
+	final static int BUFFER_SIZE = 1024*4; //4 kb
+	final static int AMOUNT_OF_THREADS = 4;
 
 	public static void main (String[] args)
 	{
@@ -32,74 +38,41 @@ public class Main
 		try //TODO: Probably should do something about this
 		{
 
-			//Open file for reading buffered
-			FileInputStream inputFileFIS = new FileInputStream(path.toFile());
-			BufferedInputStream inputFileBIS = new BufferedInputStream(inputFileFIS);
-
 			//Iterate through contents until "English" is found
-			int chunkCounter=0;
 			System.out.println("Searching for English tag (this might take a long time)...");
+			int startingPosition=0; //DR1 doesn't have archives exceeding 4GB, but better be safe
 
-			long totalBytes = inputFileBIS.available();
-			long fivePercentAmount = (long) (totalBytes*1.0/20);
-			int fivePercentCounter = 0;
-			long startingPosition=0; //DR1 doesn't have archives exceeding 4GB, but better be safe
-			long lastReportedPosition=totalBytes;
-			long available;
 
-			while((available = inputFileBIS.available())>0)
-			{
-				if (available<lastReportedPosition-fivePercentAmount)
-				{
-						System.out.println(fivePercentCounter++*5 + "% of file processed");
-						lastReportedPosition = available;
-				}
-				if ((char)inputFileBIS.read() == 'E') //potential tag
-				{
-					if ((char)inputFileBIS.read() == 'n')
-					{
-						if ((char)inputFileBIS.read() == 'g')
-						{
-							if ((char)inputFileBIS.read() == 'l')
-							{
-								if ((char)inputFileBIS.read() == 'i')
-								{
-									if ((char)inputFileBIS.read() == 's')
-									{
-										if ((char)inputFileBIS.read() == 'h')
-										{
-											startingPosition=totalBytes-inputFileBIS.available();
-											break;
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
+			Instant start = Instant.now();
 
+
+			//Open file for reading memory mapped
 			RandomAccessFile inputFile = new RandomAccessFile(path.toFile(), "r");
+			FileChannel inputFileChannel = inputFile.getChannel();
+			MappedByteBuffer inputFileMappedBuffer = inputFileChannel.map(FileChannel.MapMode.READ_ONLY, 0, inputFileChannel.size());
 
-			for (long i = 0; i < inputFile.length()-6; i++)
+			inputFileMappedBuffer.load();
+			for (int i = 0; i < inputFileMappedBuffer.limit(); i++)
 			{
-				inputFile.seek(i);
-				//nested ifs to avoid moving pointer too much (probably more efficient than reading tag on each pass at cost of unnecessary double reading on partial matches)
-				if ((char)inputFile.readByte() == 'E')
+				if (inputFileMappedBuffer.position()!=i)
 				{
-					if ((char)inputFile.readByte() == 'n')
+					inputFileMappedBuffer.position(i);
+				}
+				if ((char)inputFileMappedBuffer.get() == 'E')
+				{
+					if ((char)inputFileMappedBuffer.get() == 'n')
 					{
-						if ((char)inputFile.readByte() == 'g')
+						if ((char)inputFileMappedBuffer.get() == 'g')
 						{
-							if ((char)inputFile.readByte() == 'l')
+							if ((char)inputFileMappedBuffer.get() == 'l')
 							{
-								if ((char)inputFile.readByte() == 'i')
+								if ((char)inputFileMappedBuffer.get() == 'i')
 								{
-									if ((char)inputFile.readByte() == 's')
+									if ((char)inputFileMappedBuffer.get() == 's')
 									{
-										if ((char)inputFile.readByte() == 'h')
+										if ((char)inputFileMappedBuffer.get() == 'h')
 										{
-											startingPosition = inputFile.getFilePointer();
+											startingPosition = inputFileMappedBuffer.position();
 											System.out.println("Found English tag at " + Long.toHexString(startingPosition-7)+ ".");
 											break;
 										}
@@ -110,6 +83,9 @@ public class Main
 					}
 				}
 			}
+
+			Instant end = Instant.now();
+			System.out.println("Mapped Byte Buffer took " + Duration.between(start, end));
 
 			//Read and store string offsets in a list
 			List<Integer> offsets = new ArrayList<Integer>()
@@ -123,7 +99,7 @@ public class Main
 			};
 			int counter = 0;
 			byte[] offsetBytes = new byte[4];
-			for (long i=startingPosition; i<startingPosition+640; i++)
+			for (int i=startingPosition; i<startingPosition+640; i++) //Not sure if its possible to add variables, but if it is, this should not be constant
 			{
 				if ((counter > 3)||(i==startingPosition+639))
 				{
@@ -131,8 +107,8 @@ public class Main
 					offsets.add(offsetInt);
 					counter =0;
 				}
-				inputFile.seek(i);
-				offsetBytes[counter] = inputFile.readByte();
+				inputFileMappedBuffer.position(i);
+				offsetBytes[counter] = inputFileMappedBuffer.get();
 				counter++;
 			}
 
@@ -146,13 +122,13 @@ public class Main
 			}
 
 			//Read and store strings in a list
-			long currentSeekerPos=startingPosition+640; //Not sure if its possible to add variables, but if it is, this should not be constant
+			int currentSeekerPos=startingPosition+640; //Not sure if its possible to add variables, but if it is, this should not be constant
 			List<String> strings = new ArrayList<>();
 			List<Byte> stringBytes = new ArrayList<>();
-			while (currentSeekerPos<inputFile.length())
+			while (currentSeekerPos<inputFileMappedBuffer.limit())
 			{
-				inputFile.seek(currentSeekerPos);
-				byte currentByte = inputFile.readByte();
+				inputFileMappedBuffer.position(currentSeekerPos);
+				byte currentByte = inputFileMappedBuffer.get();
 				if (currentByte==0)
 				{
 					Byte[] stringByteArray = stringBytes.toArray(new Byte[stringBytes.size()]);
@@ -162,13 +138,13 @@ public class Main
 
 					//Look ahead for sequence of bytes 2,0,0,0 indicating end of English block
 					//Again nested ifs hopefully are more efficient
-						if (inputFile.readByte()==2)
+						if (inputFileMappedBuffer.get()==2)
 						{
-							if (inputFile.readByte()==0)
+							if (inputFileMappedBuffer.get()==0)
 							{
-								if (inputFile.readByte()==0)
+								if (inputFileMappedBuffer.get()==0)
 								{
-									if (inputFile.readByte()==0)
+									if (inputFileMappedBuffer.get()==0)
 									{
 										System.out.println("Found sequence 2000 at " + Long.toHexString(inputFile.getFilePointer()-4)+ ", terminating string search.");
 									break;
@@ -187,7 +163,7 @@ public class Main
 
 
 
-			long endingPosition = currentSeekerPos+1;
+			int endingPosition = currentSeekerPos+1;
 
 			//Sanity check to at least make sure all string match their offsets, could be just a waste of resources though
 			counter=2;
@@ -217,7 +193,7 @@ public class Main
 			String str;
 			int[] translatedLengths;
 			File file;
-			FileOutputStream fos;
+
 			int currentOffset;
 			try (Writer out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("EDIT THIS FILE IN NPP.txt"), "UTF-8")))
 			{
@@ -275,7 +251,7 @@ public class Main
 
 			System.out.println("Starting writing output file... (this might take a long time and process might appear frozen)");
 
-			//Start writing output file
+			//Start writing output file with channels
 			//TODO: delegate to another thread and display progress
 			if (args.length>0)
 			{
@@ -285,14 +261,10 @@ public class Main
 			else
 				file = new File("dr_localization(edited).bin");
 
-			fos=new FileOutputStream(file);
+			FileOutputStream fos=new FileOutputStream(file);
+			FileChannel outChannel = fos.getChannel();
 
-			//TODO: this might be very inefficient, need to examine
-			for (int i = 0; i<startingPosition;i++)
-			{
-				inputFile.seek(i);
-				fos.write(inputFile.readByte());
-			}
+			inputFileChannel.transferTo(0, startingPosition, outChannel);
 
 			//Calculate and write new offsets
 			currentOffset = 0;
@@ -316,8 +288,6 @@ public class Main
 				for (int j = result.length-1; j>=0; j--)
 				{
 					//No idea why the fuck was it working before without this, some FOS weirdness:
-					int realResult = result[j]& 0xFF;
-					String realResultHex = Integer.toHexString(realResult);
 					fos.write(result[j]& 0xFF);
 				}
 
@@ -336,13 +306,10 @@ public class Main
 				fos.write((byte)0);
 			}
 
-			for (long i=endingPosition; i<inputFile.length(); i++)
-			{
-				inputFile.seek(i);
-				fos.write(inputFile.readByte());
-			}
+			inputFileChannel.transferTo(endingPosition, (inputFileChannel.size()-endingPosition), outChannel);
 
-
+			inputFileChannel.close();
+			outChannel.close();
 			inputFile.close();
 			fos.close();
 
